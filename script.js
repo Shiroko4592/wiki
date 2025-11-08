@@ -1,4 +1,5 @@
-// JS는 필요하면 설치 버튼 누를 때 추가 기능 가능
+// 필요 시 설치 진행 중 로딩 표시 등 추가 가능
 document.getElementById('mwInstallForm')?.addEventListener('submit', function(){
-    // 버튼 클릭 시 로딩 표시 등 구현 가능
+    const result = document.getElementById('mwResult');
+    if(result) result.innerText = "설치 진행 중...";
 });
