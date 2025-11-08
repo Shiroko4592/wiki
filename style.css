@@ -26,7 +26,6 @@ aside {
 }
 
 header { margin-bottom:20px; }
-
 header h1 { color:#36c; }
 
 textarea { width:100%; box-sizing:border-box; padding:10px; }
@@ -44,3 +43,9 @@ button {
 button:hover { background:#248; }
 
 .page-content { padding:10px; background:#fafafa; border:1px solid #ddd; white-space:pre-wrap; }
+
+.ruby { display: ruby; ruby-align: center; }
+.ruby rt { font-size:0.5em; display: block; }
+
+.footnote { font-size:0.7em; vertical-align: super; cursor:pointer; color:blue; }
+.footnote-content { font-size:0.8em; background:#eee; padding:2px 4px; border-radius:3px; display:none; }
