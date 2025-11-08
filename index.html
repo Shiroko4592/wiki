@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Static Wiki</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="mw-container">
+    <header>
+        <h1>Static Wiki</h1>
+    </header>
+
+    <main>
+        <h2 id="page-title">Main Page</h2>
+        <div id="page-content" class="page-content"></div>
+
+        <div id="editor" style="display:none;">
+            <textarea id="edit-content" rows="15"></textarea>
+            <button id="save-btn">저장</button>
+            <button id="cancel-btn">취소</button>
+        </div>
+
+        <button id="edit-btn">편집</button>
+        <button id="new-btn">새 페이지</button>
+    </main>
+
+    <aside>
+        <h3>페이지 목록</h3>
+        <ul id="page-list"></ul>
+    </aside>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
