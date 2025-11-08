@@ -6,8 +6,8 @@ body {
 
 .mw-container {
     display:flex;
-    max-width: 1000px;
-    margin: 20px auto;
+    max-width:1000px;
+    margin:20px auto;
     background:#fff;
     padding:20px;
     border-radius:6px;
@@ -25,33 +25,15 @@ aside {
     padding-left:20px;
 }
 
-header {
-    grid-column:1/-1;
-    margin-bottom:20px;
-}
+header { margin-bottom:20px; }
 
-header h1 a {
-    text-decoration:none;
-    color:#36c;
-}
+header h1 { color:#36c; }
 
-nav {
-    margin-top:10px;
-}
-
-nav .login-form input {
-    padding:4px 6px;
-    margin-right:5px;
-}
-
-textarea {
-    width:100%;
-    box-sizing:border-box;
-    padding:10px;
-}
+textarea { width:100%; box-sizing:border-box; padding:10px; }
 
 button {
     padding:10px 15px;
+    margin-top:5px;
     background:#36c;
     color:#fff;
     border:none;
@@ -61,4 +43,4 @@ button {
 
 button:hover { background:#248; }
 
-.page-content { padding:10px; background:#fafafa; border:1px solid #ddd; }
+.page-content { padding:10px; background:#fafafa; border:1px solid #ddd; white-space:pre-wrap; }
