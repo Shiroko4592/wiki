@@ -1,7 +1,8 @@
 <?php
 $message = '';
+$installed = file_exists('LocalSettings.php');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installed) {
     $dbHost = $_POST['dbHost'] ?? 'localhost';
     $dbName = $_POST['dbName'] ?? '';
     $dbUser = $_POST['dbUser'] ?? '';
@@ -10,26 +11,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $adminUser = $_POST['adminUser'] ?? '';
     $adminPassword = $_POST['adminPassword'] ?? '';
 
-    // DB 연결
     $conn = new mysqli($dbHost, $dbUser, $dbPassword);
     if ($conn->connect_error) {
         $message = 'DB 연결 실패: ' . $conn->connect_error;
     } else {
         // DB 생성
-        if ($conn->query("CREATE DATABASE IF NOT EXISTS `$dbName`") === TRUE) {
+        if ($conn->query("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci") === TRUE) {
             $conn->select_db($dbName);
 
-            // 간단한 사용자 테이블 생성 (미디어위키 테이블 단순화)
-            $sql = "CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(50) NOT NULL,
-                password VARCHAR(255) NOT NULL
-            )";
-            $conn->query($sql);
+            // 미디어위키 권장 테이블 단순 구현
+            $conn->query("
+            CREATE TABLE IF NOT EXISTS user (
+                user_id INT AUTO_INCREMENT PRIMARY KEY,
+                user_name VARCHAR(255) NOT NULL UNIQUE,
+                user_password VARCHAR(255) NOT NULL,
+                user_email VARCHAR(255) DEFAULT '',
+                user_registration DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            $conn->query("
+            CREATE TABLE IF NOT EXISTS page (
+                page_id INT AUTO_INCREMENT PRIMARY KEY,
+                page_title VARCHAR(255) NOT NULL UNIQUE,
+                page_content TEXT,
+                page_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
 
             // 관리자 계정 추가
             $hash = password_hash($adminPassword, PASSWORD_DEFAULT);
-            $conn->query("INSERT INTO users (username, password) VALUES ('$adminUser', '$hash')");
+            $stmt = $conn->prepare("INSERT INTO user (user_name, user_password) VALUES (?, ?)");
+            $stmt->bind_param("ss", $adminUser, $hash);
+            $stmt->execute();
 
             // LocalSettings.php 생성
             $localSettings = "<?php\n";
@@ -41,8 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             file_put_contents('LocalSettings.php', $localSettings);
 
             // 설치 완료 후 자동 새로고침
-            header("Refresh: 2; url=index.php"); 
+            header("Refresh:2; url=index.php");
             $message = "설치 완료! 잠시 후 사이트로 이동합니다...";
+            $installed = true;
         } else {
             $message = 'DB 생성 실패: ' . $conn->error;
         }
@@ -67,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div id="mwResult"><?php echo $message; ?></div>
     <?php endif; ?>
 
-    <?php if(!file_exists('LocalSettings.php')): ?>
+    <?php if(!$installed): ?>
     <form method="POST" id="mwInstallForm">
         <fieldset>
             <legend>데이터베이스 설정</legend>
