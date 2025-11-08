@@ -1,91 +1,75 @@
 <?php
-$message = '';
-$installed = file_exists('LocalSettings.php');
+session_start();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installed) {
-    $dbHost = $_POST['dbHost'] ?? 'localhost';
-    $dbName = $_POST['dbName'] ?? '';
-    $dbUser = $_POST['dbUser'] ?? '';
-    $dbPassword = $_POST['dbPassword'] ?? '';
-    $wikiName = $_POST['wikiName'] ?? '';
-    $adminUser = $_POST['adminUser'] ?? '';
-    $adminPassword = $_POST['adminPassword'] ?? '';
-
-    $conn = new mysqli($dbHost, $dbUser, $dbPassword);
-    if ($conn->connect_error) {
-        $message = 'DB 연결 실패: ' . $conn->connect_error;
-    } else {
-        // DB 생성
-        if ($conn->query("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci") === TRUE) {
-            $conn->select_db($dbName);
-
-            // 미디어위키 기본 테이블 생성 (단순화)
-            $tables = [
-                "CREATE TABLE IF NOT EXISTS user (
-                    user_id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_name VARCHAR(255) NOT NULL UNIQUE,
-                    user_password VARCHAR(255) NOT NULL,
-                    user_email VARCHAR(255) DEFAULT '',
-                    user_registration DATETIME DEFAULT CURRENT_TIMESTAMP
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
-
-                "CREATE TABLE IF NOT EXISTS page (
-                    page_id INT AUTO_INCREMENT PRIMARY KEY,
-                    page_title VARCHAR(255) NOT NULL UNIQUE,
-                    page_content TEXT,
-                    page_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
-
-                "CREATE TABLE IF NOT EXISTS revision (
-                    rev_id INT AUTO_INCREMENT PRIMARY KEY,
-                    page_id INT NOT NULL,
-                    rev_content TEXT,
-                    rev_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (page_id) REFERENCES page(page_id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
-            ];
-
-            foreach ($tables as $sql) {
-                $conn->query($sql);
-            }
-
-            // 관리자 계정 생성
-            $hash = password_hash($adminPassword, PASSWORD_DEFAULT);
-            $stmt = $conn->prepare("INSERT INTO user (user_name, user_password) VALUES (?, ?)");
-            $stmt->bind_param("ss", $adminUser, $hash);
-            $stmt->execute();
-
-            // 기본 페이지 생성
-            $pages = [
-                ["Main Page", "여기는 $wikiName 메인 페이지입니다."],
-                ["Help", "도움말 페이지입니다."],
-                ["About", "$wikiName에 오신 것을 환영합니다."]
-            ];
-
-            $stmtPage = $conn->prepare("INSERT INTO page (page_title, page_content) VALUES (?, ?)");
-            foreach ($pages as $p) {
-                $stmtPage->bind_param("ss", $p[0], $p[1]);
-                $stmtPage->execute();
-            }
-
-            // LocalSettings.php 생성
-            $localSettings = "<?php\n";
-            $localSettings .= "\$wgDBserver = '$dbHost';\n";
-            $localSettings .= "\$wgDBname = '$dbName';\n";
-            $localSettings .= "\$wgDBuser = '$dbUser';\n";
-            $localSettings .= "\$wgDBpassword = '$dbPassword';\n";
-            $localSettings .= "\$wgSitename = '$wikiName';\n";
-            file_put_contents('LocalSettings.php', $localSettings);
-
-            // 설치 완료 후 자동 새로고침
-            header("Refresh:2; url=index.php");
-            $message = "설치 완료! 잠시 후 사이트로 이동합니다...";
-            $installed = true;
-        } else {
-            $message = 'DB 생성 실패: ' . $conn->error;
-        }
-    }
+// DB 설정
+if(file_exists('LocalSettings.php')) {
+    include 'LocalSettings.php';
+} else {
+    $installed = false;
 }
+
+$conn = new mysqli($wgDBserver ?? 'localhost', $wgDBuser ?? '', $wgDBpassword ?? '', $wgDBname ?? '');
+if ($conn->connect_error) die("DB 연결 실패: " . $conn->connect_error);
+
+// 로그인 처리
+if(isset($_POST['login'])) {
+    $user = $_POST['username'];
+    $pass = $_POST['password'];
+
+    $stmt = $conn->prepare("SELECT user_id, user_password FROM user WHERE user_name=?");
+    $stmt->bind_param("s", $user);
+    $stmt->execute();
+    $stmt->store_result();
+    $stmt->bind_result($uid, $hash);
+    if($stmt->fetch() && password_verify($pass, $hash)) {
+        $_SESSION['user_id'] = $uid;
+        $_SESSION['username'] = $user;
+    } else {
+        $login_error = "로그인 실패!";
+    }
+    $stmt->close();
+}
+
+// 로그아웃 처리
+if(isset($_GET['logout'])) {
+    session_destroy();
+    header("Location: index.php");
+}
+
+// 페이지 보기/편집 처리
+$page = $_GET['page'] ?? 'Main Page';
+$action = $_GET['action'] ?? 'view';
+
+if($action === 'edit' && isset($_POST['content'])) {
+    $content = $_POST['content'];
+    $stmt = $conn->prepare("SELECT page_id FROM page WHERE page_title=?");
+    $stmt->bind_param("s", $page);
+    $stmt->execute();
+    $stmt->store_result();
+    $stmt->bind_result($pid);
+    if($stmt->fetch()) {
+        $stmt->close();
+        $stmt = $conn->prepare("UPDATE page SET page_content=?, page_timestamp=NOW() WHERE page_id=?");
+        $stmt->bind_param("si", $content, $pid);
+        $stmt->execute();
+    } else {
+        $stmt->close();
+        $stmt = $conn->prepare("INSERT INTO page (page_title, page_content) VALUES (?, ?)");
+        $stmt->bind_param("ss", $page, $content);
+        $stmt->execute();
+    }
+    $stmt->close();
+    header("Location: index.php?page=".urlencode($page));
+    exit;
+}
+
+// 페이지 내용 가져오기
+$stmt = $conn->prepare("SELECT page_content FROM page WHERE page_title=?");
+$stmt->bind_param("s", $page);
+$stmt->execute();
+$stmt->bind_result($page_content);
+$stmt->fetch();
+$stmt->close();
 ?>
 
 <!DOCTYPE html>
@@ -93,66 +77,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installed) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MediaWiki 설치</title>
+<title><?php echo htmlspecialchars($page); ?> - <?php echo htmlspecialchars($wgSitename ?? 'Wiki'); ?></title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="mw-install-container">
-    <h1>MediaWiki 설치</h1>
-    <p>데이터베이스 정보와 관리자 계정을 입력해주세요.</p>
+<div class="mw-container">
+    <header>
+        <h1><a href="index.php"><?php echo htmlspecialchars($wgSitename ?? 'Wiki'); ?></a></h1>
+        <nav>
+            <?php if(isset($_SESSION['username'])): ?>
+                안녕하세요, <?php echo htmlspecialchars($_SESSION['username']); ?> | <a href="index.php?logout=1">로그아웃</a>
+            <?php else: ?>
+                <form method="POST" class="login-form">
+                    <input type="text" name="username" placeholder="사용자" required>
+                    <input type="password" name="password" placeholder="비밀번호" required>
+                    <button type="submit" name="login">로그인</button>
+                </form>
+                <?php if(isset($login_error)) echo '<span style="color:red;">'.$login_error.'</span>'; ?>
+            <?php endif; ?>
+        </nav>
+    </header>
 
-    <?php if($message): ?>
-        <div id="mwResult"><?php echo $message; ?></div>
-    <?php endif; ?>
+    <main>
+        <?php if($action === 'edit' && isset($_SESSION['user_id'])): ?>
+            <h2>편집: <?php echo htmlspecialchars($page); ?></h2>
+            <form method="POST">
+                <textarea name="content" rows="20"><?php echo htmlspecialchars($page_content); ?></textarea>
+                <button type="submit">저장</button>
+            </form>
+            <p><a href="index.php?page=<?php echo urlencode($page); ?>">취소</a></p>
+        <?php else: ?>
+            <h2><?php echo htmlspecialchars($page); ?></h2>
+            <div class="page-content"><?php echo nl2br(htmlspecialchars($page_content)); ?></div>
+            <?php if(isset($_SESSION['user_id'])): ?>
+                <p><a href="index.php?page=<?php echo urlencode($page); ?>&action=edit">편집</a></p>
+            <?php endif; ?>
+        <?php endif; ?>
+    </main>
 
-    <?php if(!$installed): ?>
-    <form method="POST" id="mwInstallForm">
-        <fieldset>
-            <legend>데이터베이스 설정</legend>
-            <label for="dbHost">호스트 이름</label>
-            <input type="text" id="dbHost" name="dbHost" value="localhost" required>
-
-            <label for="dbName">데이터베이스 이름</label>
-            <input type="text" id="dbName" name="dbName" required>
-
-            <label for="dbUser">사용자 이름</label>
-            <input type="text" id="dbUser" name="dbUser" required>
-
-            <label for="dbPassword">비밀번호</label>
-            <input type="password" id="dbPassword" name="dbPassword">
-        </fieldset>
-
-        <fieldset>
-            <legend>사이트 설정</legend>
-            <label for="wikiName">위키 이름</label>
-            <input type="text" id="wikiName" name="wikiName" required>
-
-            <label for="adminUser">관리자 사용자 이름</label>
-            <input type="text" id="adminUser" name="adminUser" required>
-
-            <label for="adminPassword">관리자 비밀번호</label>
-            <input type="password" id="adminPassword" name="adminPassword" required>
-        </fieldset>
-
-        <button type="submit">설치 시작</button>
-    </form>
-    <?php else: ?>
-        <p>이미 설치되어 있습니다. <a href="index.php">사이트로 이동</a></p>
-        <hr>
-        <h2>기본 페이지 목록</h2>
+    <aside>
+        <h3>페이지 목록</h3>
         <ul>
         <?php
-        $conn = new mysqli($dbHost ?? 'localhost', $dbUser ?? '', $dbPassword ?? '', $dbName ?? '');
-        if (!$conn->connect_error) {
-            $res = $conn->query("SELECT page_title FROM page");
-            while($row = $res->fetch_assoc()) {
-                echo "<li>" . htmlspecialchars($row['page_title']) . "</li>";
-            }
+        $res = $conn->query("SELECT page_title FROM page");
+        while($row = $res->fetch_assoc()) {
+            echo '<li><a href="index.php?page='.urlencode($row['page_title']).'">'.htmlspecialchars($row['page_title']).'</a></li>';
         }
         ?>
         </ul>
-    <?php endif; ?>
+        <?php if(isset($_SESSION['user_id'])): ?>
+            <p><a href="index.php?action=edit&page=새 페이지">새 페이지 만들기</a></p>
+        <?php endif; ?>
+    </aside>
 </div>
-<script src="script.js"></script>
 </body>
 </html>
